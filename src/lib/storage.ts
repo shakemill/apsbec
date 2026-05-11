@@ -76,7 +76,10 @@ async function blobGet(key: string): Promise<unknown | null> {
   const found = blobs.find((b) => b.pathname === key)
   if (!found) return null
   try {
-    const res = await fetch(found.url, { cache: "no-store" })
+    // Ajout de ?_=timestamp pour bypasser le cache CDN de Vercel Blob
+    // (les blobs overwrite restent en cache CDN jusqu'à ~60s sans ce bypass)
+    const bustUrl = `${found.url}${found.url.includes("?") ? "&" : "?"}_=${Date.now()}`
+    const res = await fetch(bustUrl, { cache: "no-store" })
     if (!res.ok) return null
     return res.json()
   } catch {
