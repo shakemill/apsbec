@@ -25,7 +25,8 @@ export default function AdminLoginPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ code }),
       })
-      if (!res.ok) { setError("Code incorrect. Accès refusé."); return }
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) { setError(data.error ?? `Erreur ${res.status}. Réessayez.`); return }
       router.push("/admin/dashboard")
     } catch { setError("Erreur de connexion. Réessayez.") }
     finally { setLoading(false) }

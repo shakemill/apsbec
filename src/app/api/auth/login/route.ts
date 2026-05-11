@@ -15,13 +15,18 @@ export async function POST(req: Request) {
     if (code !== initCode) return NextResponse.json({ error: "Code incorrect." }, { status: 401 })
 
     const codeAdminHash = await hashCode(code)
-    await saveConfig({
-      nomClub: "APSBEC",
-      devise: "FCFA",
-      cotisationMensuelle: 0,
-      abonnementAnnuel: 0,
-      codeAdminHash,
-    })
+    try {
+      await saveConfig({
+        nomClub: "APSBEC",
+        devise: "FCFA",
+        cotisationMensuelle: 0,
+        abonnementAnnuel: 0,
+        codeAdminHash,
+      })
+    } catch (err) {
+      console.error("saveConfig failed:", err)
+      return NextResponse.json({ error: `Erreur stockage : ${err instanceof Error ? err.message : String(err)}` }, { status: 500 })
+    }
     await setAdminSession()
     return NextResponse.json({ ok: true })
   }
