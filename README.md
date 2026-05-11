@@ -1,36 +1,150 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# APSBEC — Gestion des membres & cotisations
 
-## Getting Started
+Application PWA Next.js pour la gestion des membres, cotisations mensuelles et abonnements annuels du club **APSBEC**, hébergée sur [apsbec.org](https://apsbec.org).
 
-First, run the development server:
+## Fonctionnalités
+
+- 👤 **Espace membre** — consultation du solde, arrérés par mois, abonnement annuel
+- 📝 **Inscription en ligne** — validation par l'admin
+- 🔐 **Espace admin** protégé par code
+  - Gestion des membres (ajout, modification, suspension, validation)
+  - Saisie des cotisations : en lot, rattrapage, paiement partiel
+  - Abonnements annuels
+  - Rapports WhatsApp (mensuel + annuel)
+  - Configuration du club (montants, devise, code admin)
+- 📱 **PWA installable** sur Android & iOS
+- 🌗 **Thème clair / sombre** persistant
+
+## Stack technique
+
+| Technologie | Usage |
+|---|---|
+| Next.js 16 (App Router) | Framework fullstack |
+| TypeScript | Typage |
+| Tailwind CSS v4 | Styles |
+| Vercel Blob | Stockage JSON (production) |
+| Système fichiers local | Stockage JSON (développement) |
+| bcryptjs | Hachage du code admin |
+
+---
+
+## Développement local
+
+### 1. Cloner et installer
+
+```bash
+git clone https://github.com/shakemill/apsbec.git
+cd apsbec
+npm install
+```
+
+### 2. Variables d'environnement
+
+```bash
+cp .env.example .env.local
+```
+
+En développement, **pas besoin de Vercel Blob** : si `BLOB_READ_WRITE_TOKEN` est absent ou vaut `your_blob_token_here`, l'app utilise le répertoire `/data/` local automatiquement.
+
+Éditez `.env.local` :
+
+```env
+BLOB_READ_WRITE_TOKEN=your_blob_token_here   # laisser tel quel pour le mode local
+SESSION_SECRET=dev_secret_local
+ADMIN_CODE_INIT=APSBEC2024
+```
+
+### 3. Seeder les données de test (optionnel)
+
+```bash
+node scripts/seed.mjs
+```
+
+Crée 20 membres avec des cotisations de janvier à mai 2026.
+
+### 4. Lancer
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Ouvrir [http://localhost:3000](http://localhost:3000)
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+| URL | Description |
+|---|---|
+| `/` | Page d'accueil |
+| `/membre` | Espace membre (saisir son numéro) |
+| `/inscription` | Formulaire d'inscription |
+| `/admin` | Login admin (code : `APSBEC2024`) |
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+---
 
-## Learn More
+## Déploiement sur Vercel
 
-To learn more about Next.js, take a look at the following resources:
+### 1. Créer un Vercel Blob Store
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+1. Aller sur [vercel.com](https://vercel.com) → votre projet → **Storage**
+2. Créer un store **Blob**
+3. Récupérer le `BLOB_READ_WRITE_TOKEN`
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### 2. Connecter le dépôt GitHub
 
-## Deploy on Vercel
+```bash
+# Ajouter le remote si ce n'est pas fait
+git remote add origin https://github.com/shakemill/apsbec.git
+git push -u origin main
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Puis dans le dashboard Vercel : **New Project** → importer `shakemill/apsbec`.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+### 3. Variables d'environnement Vercel
+
+Dans **Settings → Environment Variables**, ajouter :
+
+| Variable | Valeur |
+|---|---|
+| `BLOB_READ_WRITE_TOKEN` | Token copié depuis votre Blob store |
+| `SESSION_SECRET` | Chaîne aléatoire (`openssl rand -base64 32`) |
+| `ADMIN_CODE_INIT` | Code admin initial (ex: `APSBEC2024`) |
+
+### 4. Déployer
+
+Vercel déclenche un build automatiquement à chaque `git push` sur `main`.
+
+### 5. Premier lancement en production
+
+1. Aller sur `https://votre-domaine.vercel.app/admin`
+2. Se connecter avec `ADMIN_CODE_INIT`
+3. Aller dans **Configuration** → changer le code admin
+4. Configurer les montants de cotisation et d'abonnement
+
+---
+
+## Structure du projet
+
+```
+src/
+├── app/
+│   ├── admin/          # Pages admin (dashboard, membres, cotisations, rapport, config)
+│   ├── api/            # Routes API (membres, cotisations, abonnements, auth, config)
+│   ├── inscription/    # Formulaire d'inscription public
+│   ├── membre/         # Espace membre
+│   └── globals.css     # Design system (dark/light theme)
+├── components/
+│   ├── admin/          # Composants admin (SaisieCotisations, RapportWhatsApp…)
+│   ├── ui/             # Composants UI génériques (Button, Card, Combobox…)
+│   └── ThemeToggle.tsx # Bascule thème clair/sombre
+├── lib/
+│   ├── blob.ts         # CRUD (abstraction Blob / local)
+│   ├── storage.ts      # Couche stockage (Vercel Blob ↔ fichiers locaux)
+│   ├── auth.ts         # Authentification admin
+│   ├── rapport.ts      # Génération rapports WhatsApp
+│   └── utils.ts        # Utilitaires (formatDate, formatMontant…)
+└── types/              # Types TypeScript partagés
+```
+
+---
+
+## Licence
+
+Usage privé — Club APSBEC
