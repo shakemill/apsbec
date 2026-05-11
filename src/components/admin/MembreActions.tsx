@@ -35,7 +35,7 @@ export function MembreActions({ membre }: { membre: Membre }) {
         type: "success",
         message: `${membre.prenom} ${membre.nom} a été ${ACTION_LABELS[statut] ?? statut} avec succès.`,
       })
-      router.refresh()
+      setTimeout(() => router.refresh(), 1500)
     } catch {
       setResult({ type: "error", message: "Erreur de connexion. Réessayez." })
     } finally {
@@ -54,7 +54,7 @@ export function MembreActions({ membre }: { membre: Membre }) {
         setResult({ type: "error", message: data.error ?? "Erreur lors de la suppression." })
         return
       }
-      router.refresh()
+      setTimeout(() => router.refresh(), 800)
     } catch {
       setResult({ type: "error", message: "Erreur de connexion. Réessayez." })
     } finally {

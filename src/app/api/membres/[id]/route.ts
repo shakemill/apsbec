@@ -31,7 +31,15 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (!parsed.success) return NextResponse.json({ error: "Données invalides." }, { status: 400 })
 
   const updated = { ...membre, ...parsed.data }
-  await saveMembre(updated)
+  try {
+    await saveMembre(updated)
+  } catch (err) {
+    console.error("saveMembre failed:", err)
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : "Erreur lors de la sauvegarde." },
+      { status: 500 }
+    )
+  }
   return NextResponse.json(updated)
 }
 
