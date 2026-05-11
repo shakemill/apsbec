@@ -1,10 +1,11 @@
 import { cn } from "@/lib/utils"
-import { CheckCircle2, XCircle, AlertTriangle, Info } from "lucide-react"
+import { CheckCircle2, XCircle, AlertTriangle, Info, X } from "lucide-react"
 
 interface AlertProps {
   type: "success" | "error" | "warning" | "info"
   message: string
   className?: string
+  onClose?: () => void
 }
 
 const config = {
@@ -14,12 +15,17 @@ const config = {
   info:    { icon: Info,           bg: "bg-blue-500/8   border-blue-500/20",    text: "text-blue-300",   iconColor: "text-blue-400"    },
 }
 
-export function Alert({ type, message, className }: AlertProps) {
+export function Alert({ type, message, className, onClose }: AlertProps) {
   const { icon: Icon, bg, text, iconColor } = config[type]
   return (
     <div className={cn("flex items-start gap-3 border rounded-xl px-4 py-3 text-sm", bg, className)}>
       <Icon size={16} className={cn("shrink-0 mt-0.5", iconColor)} />
-      <span className={text}>{message}</span>
+      <span className={cn("flex-1", text)}>{message}</span>
+      {onClose && (
+        <button onClick={onClose} className={cn("shrink-0 mt-0.5 opacity-60 hover:opacity-100 transition-opacity", iconColor)}>
+          <X size={14} />
+        </button>
+      )}
     </div>
   )
 }
