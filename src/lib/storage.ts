@@ -91,6 +91,7 @@ async function blobPut(key: string, data: unknown): Promise<void> {
       access: "public",
       contentType: "application/json",
       addRandomSuffix: false,
+      allowOverwrite: true,
     })
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err)
