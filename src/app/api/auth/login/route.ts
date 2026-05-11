@@ -11,7 +11,7 @@ export async function POST(req: Request) {
 
   // Première utilisation : aucun code configuré → on accepte le code init et on le stocke
   if (!config || !config.codeAdminHash) {
-    const initCode = process.env.ADMIN_CODE_INIT ?? "APSBEC2024"
+    const initCode = (process.env.ADMIN_CODE_INIT ?? "APSBEC2024").trim()
     if (code !== initCode) return NextResponse.json({ error: "Code incorrect." }, { status: 401 })
 
     const codeAdminHash = await hashCode(code)

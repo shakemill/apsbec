@@ -14,6 +14,8 @@ export async function GET() {
         : null,
     admin_code_init_present: !!initCode,
     admin_code_init_value: initCode ?? "(non défini → défaut: APSBEC2024)",
+    admin_code_init_length: initCode?.length ?? 0,
+    admin_code_init_trimmed: initCode?.trim() ?? "(non défini)",
     config_exists: !!config,
     config_has_hash: !!config?.codeAdminHash,
     session_secret_present: !!process.env.SESSION_SECRET,
