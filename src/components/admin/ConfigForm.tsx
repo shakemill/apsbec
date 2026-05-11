@@ -66,8 +66,8 @@ export function ConfigForm({ config }: Props) {
       if (!res.ok) { setResult({ type: "error", message: data.error ?? "Erreur." }); return }
       setResult({ type: "success", message: "Configuration enregistrée avec succès." })
       setForm((f) => ({ ...f, codeActuel: "", nouveauCode: "", confirmerCode: "" }))
-    } catch {
-      setResult({ type: "error", message: "Erreur de connexion." })
+    } catch (err) {
+      setResult({ type: "error", message: err instanceof Error ? err.message : "Erreur de connexion." })
     } finally {
       setLoading(false)
     }

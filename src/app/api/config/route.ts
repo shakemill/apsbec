@@ -45,6 +45,14 @@ export async function POST(req: Request) {
     }
   }
 
-  await saveConfig({ nomClub, devise, cotisationMensuelle, abonnementAnnuel, codeAdminHash })
+  try {
+    await saveConfig({ nomClub, devise, cotisationMensuelle, abonnementAnnuel, codeAdminHash })
+  } catch (err) {
+    console.error("saveConfig failed:", err)
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : "Erreur lors de la sauvegarde." },
+      { status: 500 }
+    )
+  }
   return NextResponse.json({ ok: true })
 }
