@@ -88,10 +88,26 @@ function ModeLot({ membres, cotisations, montantDefaut, devise }: {
     if (isNaN(mont) || mont <= 0) { setResult({ type: "error", message: "Montant invalide." }); return }
     setLoading(true); setResult(null)
     try {
+      // Pour les membres avec paiement partiel, on plafonne au solde restant
+      // afin d'éviter les surpaiements
+      const lignes = [...selection].map((membreId) => {
+        const cotExist = cotisations.find((c) => c.mois === mois && c.membreId === membreId)
+        let montantFinal = mont
+        if (cotExist && montantDefaut > 0) {
+          const reste = Math.max(0, montantDefaut - cotExist.montant)
+          montantFinal = Math.min(mont, reste)
+        }
+        return { membreId, mois, montant: montantFinal }
+      }).filter((l) => l.montant > 0)
+
+      if (lignes.length === 0) {
+        setResult({ type: "error", message: "Tous les membres sélectionnés sont déjà complets." }); return
+      }
+
       const res = await fetch("/api/cotisations", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mode: "lot", membreIds: [...selection], mois, montant: mont }),
+        body: JSON.stringify({ mode: "rattrapage", lignes }),
       })
       if (!res.ok) { setResult({ type: "error", message: "Erreur lors de la saisie." }); return }
       const data = await res.json()
@@ -146,6 +162,11 @@ function ModeLot({ membres, cotisations, montantDefaut, devise }: {
           const estPaye = cotMois && montantDefaut > 0 && cotMois.montant >= montantDefaut
           const estPartiel = cotMois && !estPaye
           const estSelectionne = selection.has(m.id)
+          const montantSaisi = parseInt(montant) || 0
+          const soldeRestant = cotMois && montantDefaut > 0
+            ? Math.max(0, montantDefaut - cotMois.montant) : 0
+          const montantReel = estPartiel && montantDefaut > 0
+            ? Math.min(montantSaisi, soldeRestant) : montantSaisi
           return (
             <button key={m.id} onClick={() => !estPaye && toggleMembre(m.id)} disabled={!!estPaye}
               className={`flex items-center gap-3 w-full text-left p-3 rounded-2xl border transition-all ${
@@ -166,10 +187,17 @@ function ModeLot({ membres, cotisations, montantDefaut, devise }: {
               </div>
               <div className="flex-1 min-w-0">
                 <div className="text-sm font-medium text-slate-200 truncate">{m.prenom} {m.nom}</div>
-                <div className="text-xs text-slate-500 font-mono">+{m.telephone}</div>
+                {estPartiel && estSelectionne && montantReel > 0 ? (
+                  <div className="text-xs text-amber-400 mt-0.5">
+                    Avance {cotMois!.montant.toLocaleString()} · +{montantReel.toLocaleString()} {devise}
+                    {montantReel + cotMois!.montant >= montantDefaut && " ✓ soldé"}
+                  </div>
+                ) : (
+                  <div className="text-xs text-slate-500 font-mono">+{m.telephone}</div>
+                )}
               </div>
               {estPaye    && <Badge variant="success" dot>Complet</Badge>}
-              {estPartiel && <Badge variant="warning" dot>Partiel {cotMois!.montant.toLocaleString()} {devise}</Badge>}
+              {estPartiel && !estSelectionne && <Badge variant="warning" dot>Avance {cotMois!.montant.toLocaleString()} {devise}</Badge>}
             </button>
           )
         })}
@@ -274,8 +302,11 @@ function ModeRattrapage({ membres, cotisations, montantDefaut, devise }: {
           <div className="flex items-center justify-between px-1">
             <span className="text-sm font-semibold text-slate-300">{membre.prenom} {membre.nom}</span>
             <button onClick={preFillTousEnRetard} className="text-xs text-blue-400 hover:text-blue-300 transition-colors">
-              Pré-remplir retards
+              Pré-remplir soldes
             </button>
+          </div>
+          <div className="text-xs text-slate-500 px-1 -mt-2">
+            Saisir n&apos;importe quel montant — il s&apos;ajoute aux paiements existants.
           </div>
 
           <div className="flex flex-col gap-2 max-h-96 overflow-y-auto pr-0.5">
@@ -489,8 +520,8 @@ export function SaisieCotisations({ membres, cotisations, abonnements, idsPayesC
   const [onglet, setOnglet] = useState<"lot" | "rattrapage" | "abonnement">("lot")
 
   const tabs = [
-    { key: "lot",         label: "En lot",      icon: <CreditCard size={13} /> },
-    { key: "rattrapage",  label: "Rattrapage",   icon: <Clock      size={13} /> },
+    { key: "lot",         label: "En lot",       icon: <CreditCard size={13} /> },
+    { key: "rattrapage",  label: "Avance/Solde",  icon: <Clock      size={13} /> },
     { key: "abonnement",  label: "Abonnement",   icon: <Star       size={13} /> },
   ] as const
 
