@@ -33,29 +33,35 @@ export default async function DashboardMembre({ params }: { params: Promise<{ te
   const montantMensuel = config?.cotisationMensuelle ?? 0
   const montantAnnuel  = config?.abonnementAnnuel ?? 0
 
-  // Mensuel
+  // ── Cotisations mensuelles ──────────────────────────────────────────────────
   const tousMois = getMoisDepuisInscription(membre.dateInscription)
   const cotParMois: Record<string, number> = {}
   cotisations.forEach((c) => { cotParMois[c.mois] = c.montant })
 
-  const estComplet = (m: string) => montantMensuel <= 0 ? m in cotParMois : (cotParMois[m] ?? 0) >= montantMensuel
-  const estPartiel = (m: string) => m in cotParMois && !estComplet(m)
+  const estComplet = (m: string) =>
+    montantMensuel <= 0 ? (m in cotParMois) : (cotParMois[m] ?? 0) >= montantMensuel
+  const estPartiel = (m: string) => (m in cotParMois) && !estComplet(m)
 
   const moisComplets = tousMois.filter(estComplet)
   const moisPartiels = tousMois.filter(estPartiel)
   const moisNonPayes = tousMois.filter((m) => !(m in cotParMois))
-  const totalMensuelPaye = cotisations.reduce((s, c) => s + c.montant, 0)
-  const totalMensuelDu   = moisNonPayes.length * montantMensuel
-    + moisPartiels.reduce((s, m) => s + Math.max(0, montantMensuel - (cotParMois[m] ?? 0)), 0)
 
-  // Annuel
+  // Total payé = somme de toutes les cotisations enregistrées
+  const totalMensuelPaye = cotisations.reduce((s, c) => s + c.montant, 0)
+  // Total dû = mois sans paiement + solde restant des mois partiels
+  const totalMensuelDu = montantMensuel <= 0 ? 0
+    : moisNonPayes.length * montantMensuel
+      + moisPartiels.reduce((s, m) => s + Math.max(0, montantMensuel - (cotParMois[m] ?? 0)), 0)
+
+  // ── Abonnements annuels ──────────────────────────────────────────────────────
   const toutesAnnees = getAnneesDepuisInscription(membre.dateInscription)
   const abParAnnee: Record<number, number> = {}
   abonnements.forEach((a) => { abParAnnee[a.annee] = a.montant })
 
-  const statutAnnee = (a: number): "complet"|"partiel"|"non_paye" => {
+  // Fix : utiliser `in` pour détecter les clés (évite que !0 soit traité comme non payé)
+  const statutAnnee = (a: number): "complet" | "partiel" | "non_paye" => {
+    if (!(a in abParAnnee)) return "non_paye"
     const m = abParAnnee[a]
-    if (!m) return "non_paye"
     if (montantAnnuel <= 0 || m >= montantAnnuel) return "complet"
     return "partiel"
   }
@@ -63,9 +69,13 @@ export default async function DashboardMembre({ params }: { params: Promise<{ te
   const anneesNonPayees = toutesAnnees.filter((a) => statutAnnee(a) === "non_paye")
   const anneesPartiels  = toutesAnnees.filter((a) => statutAnnee(a) === "partiel")
   const anneesComplets  = toutesAnnees.filter((a) => statutAnnee(a) === "complet")
+
+  // Total payé = somme de tous les abonnements enregistrés
   const totalAnnuelPaye = abonnements.reduce((s, a) => s + a.montant, 0)
-  const totalAnnuelDu   = anneesNonPayees.length * montantAnnuel
-    + anneesPartiels.reduce((s, a) => s + Math.max(0, montantAnnuel - (abParAnnee[a] ?? 0)), 0)
+  // Total dû = années sans paiement + solde restant des années partielles
+  const totalAnnuelDu = montantAnnuel <= 0 ? 0
+    : anneesNonPayees.length * montantAnnuel
+      + anneesPartiels.reduce((s, a) => s + Math.max(0, montantAnnuel - (abParAnnee[a] ?? 0)), 0)
 
   const { variant, label, dot } = statutCfg[membre.statut]
 
@@ -252,18 +262,33 @@ export default async function DashboardMembre({ params }: { params: Promise<{ te
           </Card>
         </div>
 
-        {/* TrendingUp résumé global */}
+        {/* Résumé global */}
         <Card>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 mb-3">
             <div className="w-9 h-9 rounded-xl bg-blue-500/10 flex items-center justify-center shrink-0">
               <TrendingUp size={18} className="text-blue-400" />
             </div>
-            <div className="flex-1">
-              <div className="text-xs text-slate-500 mb-1">Total général versé</div>
-              <div className="text-lg font-black text-slate-100">
-                {formatMontant(totalMensuelPaye + totalAnnuelPaye, devise)}
-              </div>
+            <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Bilan global</div>
+          </div>
+          <div className="flex flex-col gap-2">
+            <div className="flex justify-between text-sm">
+              <span className="text-slate-400">Total versé (cotisations)</span>
+              <span className="font-semibold text-emerald-400">{formatMontant(totalMensuelPaye, devise)}</span>
             </div>
+            <div className="flex justify-between text-sm">
+              <span className="text-slate-400">Total versé (abonnements)</span>
+              <span className="font-semibold text-emerald-400">{formatMontant(totalAnnuelPaye, devise)}</span>
+            </div>
+            <div className="flex justify-between text-sm pt-2 border-t border-white/[0.06]">
+              <span className="font-semibold text-slate-300">Total versé</span>
+              <span className="font-black text-slate-100">{formatMontant(totalMensuelPaye + totalAnnuelPaye, devise)}</span>
+            </div>
+            {(totalMensuelDu + totalAnnuelDu) > 0 && (
+              <div className="flex justify-between text-sm pt-1">
+                <span className="font-semibold text-slate-300">Total restant dû</span>
+                <span className="font-black text-rose-400">{formatMontant(totalMensuelDu + totalAnnuelDu, devise)}</span>
+              </div>
+            )}
           </div>
         </Card>
 
