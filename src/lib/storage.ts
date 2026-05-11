@@ -86,11 +86,22 @@ async function blobGet(key: string): Promise<unknown | null> {
 
 async function blobPut(key: string, data: unknown): Promise<void> {
   const { put } = await import("@vercel/blob")
-  await put(key, JSON.stringify(data), {
-    access: "public",
-    contentType: "application/json",
-    addRandomSuffix: false,
-  })
+  try {
+    await put(key, JSON.stringify(data), {
+      access: "public",
+      contentType: "application/json",
+      addRandomSuffix: false,
+    })
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err)
+    if (msg.includes("private store")) {
+      throw new Error(
+        "Votre Blob store est configuré en mode Private. " +
+        "Veuillez le recréer en mode Public dans le dashboard Vercel (Storage → Create Store → Blob → Public)."
+      )
+    }
+    throw err
+  }
 }
 
 async function blobDelete(key: string): Promise<void> {
