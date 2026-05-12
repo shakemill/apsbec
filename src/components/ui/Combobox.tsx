@@ -1,5 +1,6 @@
 "use client"
 import { useState, useRef, useEffect, useId } from "react"
+import { createPortal } from "react-dom"
 import { ChevronDown, Search, Check } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -36,12 +37,16 @@ export function Combobox({
   className,
   disabled,
 }: ComboboxProps) {
-  const [open, setOpen]   = useState(false)
-  const [query, setQuery] = useState("")
-  const containerRef      = useRef<HTMLDivElement>(null)
-  const searchRef         = useRef<HTMLInputElement>(null)
-  const uid               = useId()
-  const btnId             = id ?? uid
+  const [open, setOpen]       = useState(false)
+  const [query, setQuery]     = useState("")
+  const [dropPos, setDropPos] = useState({ top: 0, left: 0, width: 0 })
+  const [mounted, setMounted] = useState(false)
+  const containerRef          = useRef<HTMLDivElement>(null)
+  const searchRef             = useRef<HTMLInputElement>(null)
+  const uid                   = useId()
+  const btnId                 = id ?? uid
+
+  useEffect(() => { setMounted(true) }, [])
 
   const selected = options.find((o) => o.value === value)
   const filtered  = query.trim()
@@ -69,7 +74,18 @@ export function Combobox({
     if (open && searchable) setTimeout(() => searchRef.current?.focus(), 60)
   }, [open, searchable])
 
-  function toggle() { if (!disabled) setOpen((v) => !v) }
+  function toggle() {
+    if (disabled) return
+    if (!open && containerRef.current) {
+      const rect = containerRef.current.getBoundingClientRect()
+      setDropPos({
+        top:   rect.bottom + window.scrollY + 6,
+        left:  rect.left   + window.scrollX,
+        width: rect.width,
+      })
+    }
+    setOpen((v) => !v)
+  }
 
   function select(val: string) {
     onChange(val)
@@ -132,16 +148,21 @@ export function Combobox({
           />
         </button>
 
-        {/* ── Dropdown ──────────────────────────────────────────── */}
-        {open && (
+        {/* ── Dropdown via portal (évite tout problème de z-index/overflow) ── */}
+        {open && mounted && createPortal(
           <div
             className={cn(
-              "absolute left-0 right-0 z-[200] mt-1.5",
+              "fixed z-[9999]",
               "glass-strong rounded-2xl overflow-hidden",
-              "shadow-[0_16px_48px_rgba(0,0,0,0.40)] border border-white/[0.10]",
+              "shadow-[0_16px_48px_rgba(0,0,0,0.50)] border border-white/[0.10]",
               "animate-fade-up",
             )}
-            style={{ animationDuration: "0.14s" }}
+            style={{
+              top:   dropPos.top,
+              left:  dropPos.left,
+              width: dropPos.width,
+              animationDuration: "0.14s",
+            }}
           >
             {/* Recherche */}
             {searchable && (
@@ -165,7 +186,7 @@ export function Combobox({
             )}
 
             {/* Liste */}
-            <div className="max-h-60 overflow-y-auto py-1">
+            <div className="max-h-64 overflow-y-auto py-1">
               {filtered.length === 0 ? (
                 <div className="px-4 py-4 text-sm text-slate-500 text-center">
                   Aucun résultat
@@ -197,7 +218,8 @@ export function Combobox({
                 })
               )}
             </div>
-          </div>
+          </div>,
+          document.body,
         )}
       </div>
     </div>

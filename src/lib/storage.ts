@@ -1,6 +1,7 @@
 import fs from "fs/promises"
 import path from "path"
 import { list, put, del } from "@vercel/blob"
+import { unstable_noStore as noStore } from "next/cache"
 
 const DATA_DIR = path.join(process.cwd(), "data")
 const IS_DEV = !process.env.BLOB_READ_WRITE_TOKEN ||
@@ -80,6 +81,7 @@ async function fetchWithTimeout(url: string, ms = 8000): Promise<Response> {
 }
 
 async function blobGet(key: string): Promise<unknown | null> {
+  noStore() // Empêche Next.js de cacher les fetch internes
   // 1. Chercher l'URL dans le cache local (warm instance)
   let blobUrl = urlCache.get(key)
 
@@ -135,6 +137,7 @@ async function blobDelete(key: string): Promise<void> {
 }
 
 async function blobList(prefix: string): Promise<string[]> {
+  noStore() // Empêche Next.js de cacher la liste des blobs
   const { blobs } = await list({ prefix })
   return blobs.map((b) => b.pathname)
 }
