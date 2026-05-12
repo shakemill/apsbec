@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic"
+
 import { redirect } from "next/navigation"
 import { isAdminAuthenticated } from "@/lib/auth"
 import { getAllMembres, getAllCotisations, getConfig } from "@/lib/blob"
@@ -25,6 +27,7 @@ export default async function AdminDashboard() {
   const mois = moisCourant()
 
   const membresActifs   = membres.filter((m) => m.statut === "actif")
+  const membresSuspendus = membres.filter((m) => m.statut === "suspendu")
   const membresAttente  = membres.filter((m) => m.statut === "en_attente")
   const cotisationsMois = cotisations.filter((c) => c.mois === mois)
   const idsPayes        = new Set(cotisationsMois.filter((c) => montantMensuel <= 0 || c.montant >= montantMensuel).map((c) => c.membreId))
@@ -86,7 +89,13 @@ export default async function AdminDashboard() {
 
         {/* Stats */}
         <div className="grid grid-cols-2 gap-3 mb-6 animate-fade-up delay-1">
-          <StatCard label="Membres actifs"   value={membresActifs.length} icon={<UserCheck size={20} />} color="blue" />
+          <StatCard
+            label="Total membres"
+            value={membres.length}
+            icon={<UserCheck size={20} />}
+            color="blue"
+            sub={`${membresActifs.length} actif${membresActifs.length > 1 ? "s" : ""}${membresAttente.length ? ` · ${membresAttente.length} en attente` : ""}${membresSuspendus.length ? ` · ${membresSuspendus.length} suspendu${membresSuspendus.length > 1 ? "s" : ""}` : ""}`}
+          />
           <StatCard label="En retard ce mois" value={enRetard.length}      icon={<AlertCircle size={20} />} color="red" />
           <StatCard label="Encaissé ce mois" value={formatMontant(totalMois, devise)} icon={<Wallet size={20} />} color="green" />
           <StatCard label="Taux recouvrement" value={`${tauxRecouvrement}%`} icon={<TrendingUp size={20} />} color="purple" />
