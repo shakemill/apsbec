@@ -19,11 +19,14 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
 }
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const ok = await isAdminAuthenticated()
-  if (!ok) return NextResponse.json({ error: "Non autorisé." }, { status: 401 })
-
   const { id } = await params
-  const membre = await getMembre(id)
+
+  // Auth + fetch membre en parallèle pour réduire la latence
+  const [ok, membre] = await Promise.all([
+    isAdminAuthenticated(),
+    getMembre(id),
+  ])
+  if (!ok) return NextResponse.json({ error: "Non autorisé." }, { status: 401 })
   if (!membre) return NextResponse.json({ error: "Membre introuvable." }, { status: 404 })
 
   const body = await req.json().catch(() => null)

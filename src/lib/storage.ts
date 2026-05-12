@@ -1,8 +1,13 @@
 import fs from "fs/promises"
 import path from "path"
+import { list, put, del } from "@vercel/blob"
 
 const DATA_DIR = path.join(process.cwd(), "data")
-const IS_DEV = !process.env.BLOB_READ_WRITE_TOKEN || process.env.BLOB_READ_WRITE_TOKEN === "your_blob_token_here"
+const IS_DEV = !process.env.BLOB_READ_WRITE_TOKEN ||
+  process.env.BLOB_READ_WRITE_TOKEN.startsWith("your_blob")
+
+// Cache des URLs blob (warm instances) pour éviter list() redondants
+const urlCache = new Map<string, string>()
 
 // ─── Interface commune ────────────────────────────────────────────────────────
 
@@ -29,14 +34,12 @@ export async function storageList(prefix: string): Promise<string[]> {
 // ─── Adaptateur local (filesystem) ───────────────────────────────────────────
 
 function localPath(key: string): string {
-  const safe = key.replace(/\//g, "__")
-  return path.join(DATA_DIR, safe)
+  return path.join(DATA_DIR, key.replace(/\//g, "__"))
 }
 
 async function localGet(key: string): Promise<unknown | null> {
   try {
-    const content = await fs.readFile(localPath(key), "utf-8")
-    return JSON.parse(content)
+    return JSON.parse(await fs.readFile(localPath(key), "utf-8"))
   } catch {
     return null
   }
@@ -48,19 +51,14 @@ async function localPut(key: string, data: unknown): Promise<void> {
 }
 
 async function localDelete(key: string): Promise<void> {
-  try {
-    await fs.unlink(localPath(key))
-  } catch {
-    // fichier déjà absent
-  }
+  try { await fs.unlink(localPath(key)) } catch { /* absent */ }
 }
 
 async function localList(prefix: string): Promise<string[]> {
   try {
     await fs.mkdir(DATA_DIR, { recursive: true })
-    const files = await fs.readdir(DATA_DIR)
     const safePrefix = prefix.replace(/\//g, "__")
-    return files
+    return (await fs.readdir(DATA_DIR))
       .filter((f) => f.startsWith(safePrefix))
       .map((f) => f.replace(/__/g, "/").replace(/\.json$/, "") + ".json")
   } catch {
@@ -70,53 +68,73 @@ async function localList(prefix: string): Promise<string[]> {
 
 // ─── Adaptateur Vercel Blob ───────────────────────────────────────────────────
 
-async function blobGet(key: string): Promise<unknown | null> {
-  const { list } = await import("@vercel/blob")
-  const { blobs } = await list({ prefix: key })
-  const found = blobs.find((b) => b.pathname === key)
-  if (!found) return null
+/** Fetch avec timeout (ms) pour éviter que les appels pendent indéfiniment */
+async function fetchWithTimeout(url: string, ms = 8000): Promise<Response> {
+  const ctrl = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(), ms)
   try {
-    // Ajout de ?_=timestamp pour bypasser le cache CDN de Vercel Blob
-    // (les blobs overwrite restent en cache CDN jusqu'à ~60s sans ce bypass)
-    const bustUrl = `${found.url}${found.url.includes("?") ? "&" : "?"}_=${Date.now()}`
-    const res = await fetch(bustUrl, { cache: "no-store" })
+    return await fetch(url, { cache: "no-store", signal: ctrl.signal })
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+async function blobGet(key: string): Promise<unknown | null> {
+  // 1. Chercher l'URL dans le cache local (warm instance)
+  let blobUrl = urlCache.get(key)
+
+  // 2. Si pas en cache, faire un list() avec limit:1 pour trouver l'URL
+  if (!blobUrl) {
+    const { blobs } = await list({ prefix: key, limit: 5 })
+    const found = blobs.find((b) => b.pathname === key)
+    if (!found) return null
+    blobUrl = found.url
+    urlCache.set(key, blobUrl)
+  }
+
+  try {
+    // Cache-busting pour bypasser le CDN de Vercel Blob (TTL ~60s)
+    const res = await fetchWithTimeout(`${blobUrl}?_=${Date.now()}`)
     if (!res.ok) return null
     return res.json()
   } catch {
-    return null
+    // En cas d'échec (ex: URL expirée), vider le cache et réessayer une fois
+    urlCache.delete(key)
+    const { blobs } = await list({ prefix: key, limit: 5 })
+    const found = blobs.find((b) => b.pathname === key)
+    if (!found) return null
+    try {
+      const res = await fetchWithTimeout(`${found.url}?_=${Date.now()}`)
+      if (!res.ok) return null
+      urlCache.set(key, found.url)
+      return res.json()
+    } catch {
+      return null
+    }
   }
 }
 
 async function blobPut(key: string, data: unknown): Promise<void> {
-  const { put } = await import("@vercel/blob")
-  try {
-    await put(key, JSON.stringify(data), {
-      access: "public",
-      contentType: "application/json",
-      addRandomSuffix: false,
-      allowOverwrite: true,
-    })
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err)
-    if (msg.includes("private store")) {
-      throw new Error(
-        "Votre Blob store est configuré en mode Private. " +
-        "Veuillez le recréer en mode Public dans le dashboard Vercel (Storage → Create Store → Blob → Public)."
-      )
-    }
-    throw err
-  }
+  const result = await put(key, JSON.stringify(data), {
+    access: "public",
+    contentType: "application/json",
+    addRandomSuffix: false,
+    allowOverwrite: true,
+  })
+  // Mettre à jour le cache avec la nouvelle URL
+  urlCache.set(key, result.url)
 }
 
 async function blobDelete(key: string): Promise<void> {
-  const { list, del } = await import("@vercel/blob")
-  const { blobs } = await list({ prefix: key })
+  const { blobs } = await list({ prefix: key, limit: 5 })
   const found = blobs.find((b) => b.pathname === key)
-  if (found) await del(found.url)
+  if (found) {
+    await del(found.url)
+    urlCache.delete(key)
+  }
 }
 
 async function blobList(prefix: string): Promise<string[]> {
-  const { list } = await import("@vercel/blob")
   const { blobs } = await list({ prefix })
   return blobs.map((b) => b.pathname)
 }
