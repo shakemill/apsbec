@@ -49,6 +49,8 @@ export default function NouveauMembrePage() {
       })
       const data = await res.json()
       if (!res.ok) { setError(data.error ?? "Erreur."); return }
+      // Attendre que Vercel Blob indexe le nouveau blob (~800-1000ms)
+      await new Promise((r) => setTimeout(r, 1500))
       router.push("/admin/membres")
     } catch { setError("Erreur de connexion.") }
     finally { setLoading(false) }

@@ -80,16 +80,25 @@ async function fetchWithTimeout(url: string, ms = 8000): Promise<Response> {
   }
 }
 
-async function blobGet(key: string): Promise<unknown | null> {
+async function blobGet(key: string, attempt = 0): Promise<unknown | null> {
   noStore() // Empêche Next.js de cacher les fetch internes
   // 1. Chercher l'URL dans le cache local (warm instance)
   let blobUrl = urlCache.get(key)
 
-  // 2. Si pas en cache, faire un list() avec limit:1 pour trouver l'URL
+  // 2. Si pas en cache, faire un list() pour trouver l'URL
   if (!blobUrl) {
     const { blobs } = await list({ prefix: key, limit: 5 })
     const found = blobs.find((b) => b.pathname === key)
-    if (!found) return null
+
+    if (!found) {
+      // Vercel Blob a un délai d'indexation après un write (~500-1000ms)
+      // On réessaie une fois après 800ms avant de déclarer introuvable
+      if (attempt === 0) {
+        await new Promise((r) => setTimeout(r, 800))
+        return blobGet(key, 1)
+      }
+      return null
+    }
     blobUrl = found.url
     urlCache.set(key, blobUrl)
   }
@@ -100,19 +109,10 @@ async function blobGet(key: string): Promise<unknown | null> {
     if (!res.ok) return null
     return res.json()
   } catch {
-    // En cas d'échec (ex: URL expirée), vider le cache et réessayer une fois
+    // URL expirée : vider le cache et réessayer via list()
     urlCache.delete(key)
-    const { blobs } = await list({ prefix: key, limit: 5 })
-    const found = blobs.find((b) => b.pathname === key)
-    if (!found) return null
-    try {
-      const res = await fetchWithTimeout(`${found.url}?_=${Date.now()}`)
-      if (!res.ok) return null
-      urlCache.set(key, found.url)
-      return res.json()
-    } catch {
-      return null
-    }
+    if (attempt === 0) return blobGet(key, 1)
+    return null
   }
 }
 

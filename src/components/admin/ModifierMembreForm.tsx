@@ -37,7 +37,8 @@ export function ModifierMembreForm({ membre }: { membre: Membre }) {
           adresse: form.adresse.trim() || undefined,
         }),
       })
-      if (!res.ok) { setError("Erreur lors de la mise à jour."); return }
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) { setError(data.error ?? "Erreur lors de la mise à jour."); return }
       router.push("/admin/membres")
     } catch {
       setError("Erreur de connexion.")
